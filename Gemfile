@@ -8,4 +8,5 @@ gem "rake", "~> 13.0"
 
 group :test do
   gem "rspec", "~> 3.0"
+  gem "rantly"
 end
