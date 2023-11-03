@@ -33,6 +33,37 @@ gfc.encrypt(2) # => 3833777695217202560
 gfc.decrypt(3833777695217202560) # => 2
 ```
 
+Example use in a Rails app:
+
+```ruby
+# app/models/customer.rb
+
+class Customer < ApplicationRecord
+  def self.gfc
+    @@gfc ||= GFC64.new(ENV['GFC_KEY'])
+  end
+
+  def to_param
+    self.class.gfc.encrypt(id)
+  end
+
+  def self.find_by_param(gfc_id)
+    find(self.class.gfc.decrypt(gfc_id))
+  end
+end
+```
+
+```ruby
+# app/controllers/customers_controller.rb
+
+class CustomersController < ApplicationController
+  def show
+    @customer = Customer.find_by_param(params[:id])
+  end
+end
+
+```
+
 ## Disclaimer
 
 This code has not been vetted by a security audit or a professional
