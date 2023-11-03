@@ -48,7 +48,7 @@ class Customer < ApplicationRecord
   end
 
   def self.find_by_param(gfc_id)
-    find(self.class.gfc.decrypt(gfc_id))
+    find(gfc.decrypt(gfc_id))
   end
 end
 ```
