@@ -8,6 +8,12 @@ you want to expose in an app, but you don't want to leak count information
 (e.g. `/customers/1`, `/customers/2`, ...), and you don't want to add another
 column to store something auxiliary like a UUID.
 
+For example, with this gem, routes like
+
+`/customers/1` can become something like `/customers/4552956331295818987`, and
+
+`/customers/2` can become something like `/customers/3833777695217202560`
+
 ## Usage
 
 ```ruby
