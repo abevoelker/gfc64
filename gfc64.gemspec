@@ -5,7 +5,7 @@ $:.push File.expand_path("../lib", __FILE__)
 require "gfc64"
 
 Gem::Specification.new do |s|
-  s.name        = "GFC64"
+  s.name        = "gfc64"
   s.version     = GFC64::VERSION.dup
   s.platform    = Gem::Platform::RUBY
   s.licenses    = ["MIT"]
