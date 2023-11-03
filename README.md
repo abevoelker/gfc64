@@ -37,4 +37,4 @@ Black, John, and Phillip Rogaway. ["Ciphers with Arbitrary Finite Domains."][pap
 Hat tip to [this Hacker News comment][hn] that led me to the idea and the paper.
 
 [paper]: https://web.cs.ucdavis.edu/~rogaway/papers/subset.pdf
-[hn]: https://news.ycombinator.com/item?id=27016779)
+[hn]: https://news.ycombinator.com/item?id=27016779
