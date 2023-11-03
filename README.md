@@ -14,6 +14,14 @@ For example, with this gem, routes like
 
 `/customers/2` can become something like `/customers/3833777695217202560`
 
+## Installation
+
+Add to your `Gemfile`:
+
+```ruby
+gem "gfc64"
+```
+
 ## Usage
 
 ```ruby
