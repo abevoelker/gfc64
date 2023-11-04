@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 class GFC64
   module ActiveRecord
     def self.[](gfc)
