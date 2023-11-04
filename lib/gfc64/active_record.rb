@@ -26,7 +26,7 @@ class GFC64
 
     module InstanceMethods
       def gfc_id
-        self.class.gfc.encrypt(id)
+        id && self.class.gfc.encrypt(id)
       end
 
       def to_param
