@@ -4,7 +4,7 @@ require "openssl"
 require "securerandom"
 
 class GFC64
-  VERSION = "0.0.2".freeze
+  VERSION = "0.0.3".freeze
 
   attr_reader :rounds, :key, :block_size
 
@@ -55,3 +55,5 @@ class GFC64
     OpenSSL::Digest::SHA256.digest(key + [round].pack('L'))[0...16] # Truncate to 128 bits for AES key
   end
 end
+
+require "gfc64/active_record"

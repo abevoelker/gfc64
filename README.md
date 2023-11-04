@@ -33,23 +33,20 @@ gfc.encrypt(2) # => 3833777695217202560
 gfc.decrypt(3833777695217202560) # => 2
 ```
 
-Example use in a Rails app:
+For Rails usage, there is an ActiveRecord mixin which adds `#gfc_id` and
+`#to_param` methods and a `::find_gfc` class method. By setting `#to_param`,
+resource path helpers like `customer_path(@customer)` automatically use the
+GFC encrypted ID.
+
+Example usage:
 
 ```ruby
 # app/models/customer.rb
 
 class Customer < ApplicationRecord
-  def self.gfc
-    @@gfc ||= GFC64.new(ENV['GFC_KEY'])
-  end
-
-  def to_param
-    self.class.gfc.encrypt(id)
-  end
-
-  def self.find_by_param(gfc_id)
-    find(gfc.decrypt(gfc_id))
-  end
+  include GFC64::ActiveModel[GFC64.new(ENV['GFC_KEY'])]
+  # or the argument can be a proc/lambda if you need late binding:
+  # include GFC64::ActiveModel[-> { GFC64.new(ENV['GFC_KEY']) }]
 end
 ```
 
@@ -58,10 +55,9 @@ end
 
 class CustomersController < ApplicationController
   def show
-    @customer = Customer.find_by_param(params[:id])
+    @customer = Customer.find_gfc(params[:id])
   end
 end
-
 ```
 
 ## Disclaimer
