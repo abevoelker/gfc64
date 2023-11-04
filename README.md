@@ -44,9 +44,9 @@ Example usage:
 # app/models/customer.rb
 
 class Customer < ApplicationRecord
-  include GFC64::ActiveModel[GFC64.new(ENV['GFC_KEY'])]
+  include GFC64::ActiveRecord[GFC64.new(ENV['GFC_KEY'])]
   # or the argument can be a proc/lambda if you need late binding:
-  # include GFC64::ActiveModel[-> { GFC64.new(ENV['GFC_KEY']) }]
+  # include GFC64::ActiveRecord[-> { GFC64.new(ENV['GFC_KEY']) }]
 end
 ```
 
@@ -59,6 +59,17 @@ class CustomersController < ApplicationController
   end
 end
 ```
+
+## Potential drawbacks
+
+Ruby's dynamic typing means we're just passing bare Integers around, so it's
+possible to make a mistake where you write something like `Model.find(gfc_id)`
+and return a completely unexpected record because you forgot to decrypt the ID.
+
+With a type system it would be trivial to prevent these errors. However, the
+space of 64-bit integers is very large, and encrypted IDs tend to occupy numbers
+much higher than most web apps will ever reach, so more than likely this sort of
+error would be discovered quickly as queries fail to find anything.
 
 ## Disclaimer
 
