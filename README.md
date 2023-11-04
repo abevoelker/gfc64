@@ -1,18 +1,29 @@
 # GFC64
 
-Format-preserving Generalized Feistel Cipher for 64-bit integers. Encrypts 64-bit
-integers into... 64-bit integers!
+Encrypt 64-bit integers into other 64-bit integers without collisions.
 
-Very useful for if you have sequential 64-bit integer database primary keys that
-you want to expose in an app, but you don't want to leak count information
-(e.g. `/customers/1`, `/customers/2`, ...), and you don't want to add another
-column to store something auxiliary like a UUID.
+Useful for hiding database auto-incrementing primary keys without needing
+to store additional data (like a UUID field).
 
-For example, with this gem, routes like
+For example, say you have a web app where routes are stored like `/customers/:id`
+so that you have exposed URL paths like this:
 
-`/customers/1` can become something like `/customers/4552956331295818987`, and
+`/customers/1`
 
-`/customers/2` can become something like `/customers/3833777695217202560`
+`/customers/2`
+
+With this gem, you can (at view-time) encrypt the above IDs into different IDs
+so that you get these paths instead, without storing any additional data:
+
+`/customers/4552956331295818987` (the backend decrypts this into `/customers/1`)
+
+`/customers/3833777695217202560` (the backend decrypts this into `/customers/2`)
+
+All while keeping your auto-incrementing, sequential IDs in your database and
+getting all the benefits of a standard database index.
+
+The encryption is achieved by implementing a format-preserving
+[Generalized Feistel Cipher][paper].
 
 ## Installation
 
@@ -22,7 +33,7 @@ Add to your `Gemfile`:
 gem "gfc64"
 ```
 
-## Usage
+## General Usage
 
 ```ruby
 key = SecureRandom.hex(32) # => "ffb5e3600fc27924f97dc055440403b10ce97160261f2a87eee576584cf942e5"
@@ -33,7 +44,9 @@ gfc.encrypt(2) # => 3833777695217202560
 gfc.decrypt(3833777695217202560) # => 2
 ```
 
-For Rails usage, there is an ActiveRecord mixin which adds `#gfc_id` and
+## Rails Usage
+
+For Rails, there's an ActiveRecord mixin which adds `#gfc_id` and
 `#to_param` methods and a `::find_gfc` class method. By setting `#to_param`,
 resource path helpers like `customer_path(@customer)` automatically use the
 GFC encrypted ID.
@@ -49,6 +62,8 @@ class Customer < ApplicationRecord
   # include GFC64::ActiveRecord[-> { GFC64.new(ENV['GFC_KEY']) }]
 end
 ```
+
+For retrieval, use `::find_gfc`:
 
 ```ruby
 # app/controllers/customers_controller.rb
