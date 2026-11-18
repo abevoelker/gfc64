@@ -44,6 +44,34 @@ gfc.encrypt(2) # => 3833777695217202560
 gfc.decrypt(3833777695217202560) # => 2
 ```
 
+## Narrower numbers (`bits:`)
+
+64-bit results are long (up to 20 digits). For something people read and
+type, such as an invoice or order number, encrypt into a narrower range
+instead. `bits:` takes any even width from 16 to 64; every number from 0 to
+`2**bits - 1` encrypts to a different number in that same range:
+
+```ruby
+gfc = GFC64.new(key, bits: 40)
+gfc.encrypt(1) # => a number below 2**40 (1,099,511,627,776)
+gfc.decrypt(gfc.encrypt(1)) # => 1
+```
+
+40 bits is exactly 8 characters of [Crockford base32][crockford], so a
+counter can become a short, unguessable code like `7KQMR3XH`.
+
+- Below 64 bits the default is 10 rounds (NIST's FF1 uses 10), since each
+  half is smaller; pass `rounds:` to change it. 64-bit keeps 3, so values
+  encrypted with 0.1.0 are unchanged.
+- The width is mixed into the round keys: the same key at 40 and 48 bits
+  gives unrelated ciphers.
+- Pick a width you can keep. Changing `bits:` (or the key) changes every
+  encrypted value, so store the encrypted value if it's printed or sent
+  anywhere, and start a new width for new records rather than re-encrypting
+  old ones.
+- Small widths are small domains: at 16 bits there are only 65,536
+  values, so don't rely on unguessability there.
+
 ## Rails Usage
 
 For Rails, there's an ActiveRecord mixin which adds `#gfc_id` and
@@ -104,4 +132,5 @@ Black, John, and Phillip Rogaway. ["Ciphers with Arbitrary Finite Domains."][pap
 Hat tip to [this Hacker News comment][hn] that led me to the idea and the paper.
 
 [paper]: https://web.cs.ucdavis.edu/~rogaway/papers/subset.pdf
+[crockford]: https://www.crockford.com/base32.html
 [hn]: https://news.ycombinator.com/item?id=27016779
