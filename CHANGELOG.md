@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- `sql/gfc64_postgres.sql` (experimental): FF1 and Crockford base32 in
+  PL/pgSQL on pgcrypto, and a `BEFORE INSERT` trigger that fills a code
+  column from the row's primary key, giving the same codes as `has_code`
+  for any insert path. RDS-compatible. Specs (with `GFC64_PG_URL`) run the
+  NIST FF1 samples in SQL and compare it with the gem.
+
 ## 1.0.0
 
 ### Upgrading from 0.1.0

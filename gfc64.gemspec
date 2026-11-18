@@ -21,7 +21,7 @@ Gem::Specification.new do |s|
     "bug_tracker_uri"   => "https://github.com/abevoelker/gfc64/issues"
   }
 
-  s.files         = Dir["{app,config,lib}/**/*", "README.md", "CHANGELOG.md"]
+  s.files         = Dir["{app,config,lib,sql}/**/*", "README.md", "CHANGELOG.md"]
   s.require_paths = ["lib"]
   s.required_ruby_version = '>= 2.4.0'
 end

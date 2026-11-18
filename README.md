@@ -414,6 +414,57 @@ gfc.decrypt(fmt.decode("bgy8 lykj")) # => 1 (any case; O→0, I/L→1; spaces an
 - Build your own with `GFC64::Format::Alphabet.new(chars, bits:,
   case_sensitive:, aliases: { "O" => "0" })`.
 
+## Postgres (database-side codes)
+
+*Experimental.* `sql/gfc64_postgres.sql` (shipped with the gem) is the same
+FF1 and Crockford base32 in PL/pgSQL, plus a `BEFORE INSERT` trigger that
+fills a code column from the row's primary key. It gives exactly the codes
+`has_code` does, but for every insert path: `insert_all`, raw SQL, `COPY`,
+`psql`, other services. It needs only `pgcrypto`, so it runs on Amazon RDS
+and Aurora (no custom C extension).
+
+Use it when rows are inserted outside ActiveRecord callbacks. If everything
+goes through `create`/`save`, `has_code` alone is simpler and keeps the key
+out of the database.
+
+```ruby
+# migration
+def up
+  execute File.read(File.join(Gem.loaded_specs["gfc64"].full_gem_path, "sql", "gfc64_postgres.sql"))
+  add_column :invoices, :number, :string, null: false
+  add_index :invoices, :number, unique: true
+  execute <<~SQL
+    CREATE TRIGGER invoices_number BEFORE INSERT ON invoices FOR EACH ROW
+      EXECUTE FUNCTION gfc64_assign_code('number', 'default', 'invoices.number', 'APP-', '8', '4');
+  SQL
+end
+```
+
+```sql
+-- once per environment, from the same GFC64_KEY the app uses (not in a migration file)
+INSERT INTO gfc64_keys VALUES ('default', decode('<the 64 hex characters>', 'hex'));
+```
+
+- **No race:** in a `BEFORE INSERT` trigger the id's default (`nextval`) has
+  already been applied, so the trigger encrypts the row's real id.
+- **Arguments:** column, key name, tweak, prefix, length, group size, and
+  the primary-key column (`id` by default). The tweak must match the
+  model's: `has_code`'s default is `"table.column"`. A code that's already
+  set (by `has_code`, or by hand) is kept, so the two can run together.
+- **Functions** for use in SQL: `gfc64_ff1(key, tweak, radix, length,
+  value, decrypting)`, `gfc64_crockford_encode(value, length, group)` and
+  `gfc64_crockford_decode(text, length)` (forgiving, NULL for anything that
+  isn't a code; it doesn't strip prefixes).
+- **Checked against the gem:** the spec suite (with `GFC64_PG_URL`) runs all
+  nine NIST FF1 samples in SQL and compares SQL codes with
+  `GFC64::FF1` + `Crockford32` and with the trigger's output.
+- **Speed:** roughly 0.5 ms per row in the trigger; fine for normal inserts,
+  minutes for millions of rows.
+- **The key lives in the database.** `gfc64_keys` is readable only by its
+  owner, and the trigger function reads it as `SECURITY DEFINER`, so the
+  app's role can insert but can't select the key. It's still in backups and
+  replicas, and readable by the owner role; that's the price of a trigger.
+
 ## Things to know
 
 - **A public id isn't permission.** It hides how many records you have and
