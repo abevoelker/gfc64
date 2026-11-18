@@ -36,8 +36,8 @@ gem "gfc64"
 ## General Usage
 
 ```ruby
-key = SecureRandom.hex(32) # => "ffb5e3600fc27924f97dc055440403b10ce97160261f2a87eee576584cf942e5"
-gfc = GFC64.new(key)
+key = GFC64.generate_key # => e.g. "ffb5e3600fc27924f97dc055440403b10ce97160261f2a87eee576584cf942e5"
+gfc = GFC64.new(key)    # (the values below are for that example key, which GFC64 now refuses: see Keys)
 gfc.encrypt(1) # => 4552956331295818987
 gfc.decrypt(4552956331295818987) # => 1
 gfc.encrypt(2) # => 3833777695217202560
@@ -72,6 +72,30 @@ counter can become a short, unguessable code like `7KQMR3XH`.
 - Small widths are small domains: at 16 bits there are only 65,536
   values, so don't rely on unguessability there.
 
+## Keys
+
+The key is what makes the output unpredictable. Two apps using the same
+tweak (say `"invoices"`) get unrelated sequences as long as each has its
+own random key; anyone who has a key can compute every value under it.
+
+- Generate keys, don't write them: `GFC64.generate_key` (64 hex characters)
+  for `GFC64.new`, `GFC64::FF1.generate_key` (32 raw bytes, or
+  `generate_key(hex: true)`) for FF1. Never derive one from a password.
+- Keep it with your other secrets (an env var, a secrets manager), one per
+  environment, and don't change it: a new key changes every value.
+- The README's example key, NIST's FF1 test keys and keys that repeat one or
+  two bytes (`"k" * 32`, `""`) raise `ArgumentError`. Pass
+  `insecure_test_key: true` to use one in tests.
+- If the key leaks, past and future values become computable. When values
+  must stay unguessable even then, use random values with a uniqueness check
+  instead of a cipher.
+
+### Upgrading from 0.1.0
+
+64-bit values are unchanged. The only difference is that the example key and
+non-random keys now raise; generate a new key, or pass
+`insecure_test_key: true` where a test relies on one.
+
 ## Tweaks (`tweak:`)
 
 A tweak is a public string that picks one of many independent ciphers under
@@ -86,7 +110,8 @@ invoices.encrypt(42) # unrelated to orders.encrypt(42)
 
 - One secret key can serve several kinds of numbers, and knowing one kind's
   codes says nothing about another's.
-- A tweak isn't a secret, and it isn't a per-record salt: values are only
+- A tweak isn't a secret and doesn't need randomness (that's the key's job),
+  and it isn't a per-record salt: values are only
   guaranteed collision-free within one key + tweak. Use one fixed tweak per
   kind of number.
 - A new tweak (`"invoices-v2"`) starts a fresh sequence without a new key.
@@ -101,7 +126,7 @@ nine of NIST's FF1 sample vectors (AES-128/192/256, radix 10 and 36, with and
 without tweaks).
 
 ```ruby
-key = SecureRandom.bytes(32) # AES-256; 16 or 24 bytes for AES-128/192
+key = GFC64::FF1.generate_key # 32 random bytes (AES-256); generate_key(hex: true) for storage
 ff1 = GFC64::FF1.new(key, radix: 32, length: 8, tweak: "invoices")
 fmt = GFC64::Format::Crockford32.new(length: 8, group: 4)
 

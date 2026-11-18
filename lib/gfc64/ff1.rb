@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "openssl"
+require "securerandom"
 
 class GFC64
   # FF1 format-preserving encryption, NIST SP 800-38G (Algorithms 7 and 8):
@@ -21,15 +22,20 @@ class GFC64
 
     attr_reader :radix, :length, :tweak
 
-    # key:    the AES key as raw bytes (16, 24 or 32 bytes); for hex,
-    #         [hex].pack("H*")
+    # key:    the AES key as raw bytes (16, 24 or 32 bytes), secret and random:
+    #         FF1.generate_key makes one; from hex, [hex].pack("H*"). Example
+    #         keys are refused unless insecure_test_key: true (tests only).
     # radix:  the base of each digit, 2 to 65,536
     # length: digits per value when using encrypt/decrypt on Integers
     #         (encrypt_digits takes any length the domain rule allows)
     # tweak:  public bytes that select an independent permutation (default "")
-    def initialize(key, radix:, length: nil, tweak: "")
+    def initialize(key, radix:, length: nil, tweak: "", insecure_test_key: false)
+      raise ArgumentError, "key must be a String of bytes" unless key.is_a?(String)
+
       key = key.b
       raise ArgumentError, "key must be 16, 24 or 32 bytes (AES-128/192/256)" unless [16, 24, 32].include?(key.bytesize)
+
+      Keys.check!(key, insecure_test_key)
       raise ArgumentError, "radix must be an Integer from 2 to #{MAX_RADIX}" unless radix.is_a?(Integer) && radix.between?(2, MAX_RADIX)
 
       @radix = radix
@@ -38,6 +44,13 @@ class GFC64
       check_length!(length) unless length.nil?
       @cipher_name = "AES-#{key.bytesize * 8}-ECB"
       @key = key
+    end
+
+    # A random AES-256 key: raw bytes, or hex (64 characters) for storing in
+    # an env var or secrets manager; load hex with [hex].pack("H*").
+    def self.generate_key(hex: false)
+      key = SecureRandom.bytes(32)
+      hex ? key.unpack1("H*") : key
     end
 
     # Integer in, Integer out: 0 <= number < radix**length.

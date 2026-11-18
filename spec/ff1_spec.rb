@@ -29,7 +29,7 @@ RSpec.describe GFC64::FF1 do
 
   NIST_SAMPLES.each do |sample, key, radix, tweak, plain, cipher|
     it "matches NIST FF1 sample #{sample} (AES-#{key.length * 4}, radix #{radix}#{tweak.empty? ? '' : ', tweak'})" do
-      ff1 = described_class.new([key].pack("H*"), radix: radix, tweak: [tweak].pack("H*"))
+      ff1 = described_class.new([key].pack("H*"), radix: radix, tweak: [tweak].pack("H*"), insecure_test_key: true)
       expect(text(ff1.encrypt_digits(digits(plain)))).to eq(cipher)
       expect(text(ff1.decrypt_digits(digits(cipher)))).to eq(plain)
     end
@@ -85,6 +85,25 @@ RSpec.describe GFC64::FF1 do
       e = ff1.encrypt(99, tweak: "x")
       expect(ff1.decrypt(e, tweak: "x")).to eq(99)
       expect(e).not_to eq(ff1.encrypt(99))
+    end
+  end
+
+  context "keys" do
+    it "generates random AES-256 keys, raw or hex" do
+      raw = described_class.generate_key
+      hex = described_class.generate_key(hex: true)
+      expect(raw.bytesize).to eq(32)
+      expect(hex).to match(/\A\h{64}\z/)
+      expect { described_class.new([hex].pack("H*"), radix: 10) }.not_to raise_error
+      expect(described_class.generate_key).not_to eq(raw)
+    end
+
+    it "refuses NIST's sample keys and non-random keys unless told it's a test" do
+      [K128, K192, K256].each do |k|
+        expect { described_class.new([k].pack("H*"), radix: 10) }.to raise_error(ArgumentError, /published example key/)
+      end
+      expect { described_class.new("k" * 32, radix: 10) }.to raise_error(ArgumentError, /isn't random/)
+      expect { described_class.new([K128].pack("H*"), radix: 10, insecure_test_key: true) }.not_to raise_error
     end
   end
 

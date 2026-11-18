@@ -11,6 +11,7 @@ RSpec.describe GFC64 do
 
   context "known good values" do
     let(:key) { "ffb5e3600fc27924f97dc055440403b10ce97160261f2a87eee576584cf942e5" }
+    let(:gfc) { GFC64.new(key, insecure_test_key: true) }
 
     it "encrypts and decrypts a number" do
       expect(gfc.encrypt(1234567890)).to eq(11276442059044733597)
@@ -21,12 +22,12 @@ RSpec.describe GFC64 do
     end
 
     it "gives the same 64-bit results when bits: 64 is passed explicitly" do
-      expect(GFC64.new(key, bits: 64).encrypt(1)).to eq(4552956331295818987)
-      expect(GFC64.new(key, bits: 64).rounds).to eq(3)
+      expect(GFC64.new(key, bits: 64, insecure_test_key: true).encrypt(1)).to eq(4552956331295818987)
+      expect(GFC64.new(key, bits: 64, insecure_test_key: true).rounds).to eq(3)
     end
 
     it "keeps 40-bit values stable across versions" do
-      gfc40 = GFC64.new(key, bits: 40)
+      gfc40 = GFC64.new(key, bits: 40, insecure_test_key: true)
       expect([1, 2, 3, 1234567890].map { |n| gfc40.encrypt(n) }).to eq(KNOWN_40_BIT)
     end
   end
@@ -108,8 +109,8 @@ RSpec.describe GFC64 do
 
     it "leaves results unchanged when no tweak is given (64-bit and narrower)" do
       known = "ffb5e3600fc27924f97dc055440403b10ce97160261f2a87eee576584cf942e5"
-      expect(GFC64.new(known, tweak: nil).encrypt(1)).to eq(4552956331295818987)
-      expect([1, 2, 3, 1234567890].map { |n| GFC64.new(known, bits: 40).encrypt(n) }).to eq(KNOWN_40_BIT)
+      expect(GFC64.new(known, tweak: nil, insecure_test_key: true).encrypt(1)).to eq(4552956331295818987)
+      expect([1, 2, 3, 1234567890].map { |n| GFC64.new(known, bits: 40, insecure_test_key: true).encrypt(n) }).to eq(KNOWN_40_BIT)
     end
 
     it "gives unrelated ciphers under one key, each still a permutation" do
@@ -139,13 +140,37 @@ RSpec.describe GFC64 do
     end
 
     it "keeps the tweak and the width apart (length-prefixed)" do
-      a = GFC64.new("k", bits: 40, tweak: "ab").encrypt(7)
-      b = GFC64.new("k", bits: 40, tweak: "a").encrypt(7)
+      a = GFC64.new(key, bits: 40, tweak: "ab").encrypt(7)
+      b = GFC64.new(key, bits: 40, tweak: "a").encrypt(7)
       expect(a).not_to eq(b)
     end
 
     it "rejects a non-String tweak" do
       expect { GFC64.new(key, tweak: 123) }.to raise_error(ArgumentError, /tweak/)
+    end
+  end
+
+  context "keys" do
+    it "generates random 64-hex-character keys" do
+      k = GFC64.generate_key
+      expect(k).to match(/\A\h{64}\z/)
+      expect(GFC64.generate_key).not_to eq(k)
+      expect { GFC64.new(k) }.not_to raise_error
+    end
+
+    it "refuses the README's example key and NIST's test keys unless told it's a test" do
+      readme = "ffb5e3600fc27924f97dc055440403b10ce97160261f2a87eee576584cf942e5"
+      expect { GFC64.new(readme) }.to raise_error(ArgumentError, /published example key/)
+      expect { GFC64.new(readme.upcase) }.to raise_error(ArgumentError, /published example key/)
+      expect { GFC64.new("2B7E151628AED2A6ABF7158809CF4F3C") }.to raise_error(ArgumentError, /published example key/)
+      expect { GFC64.new(readme, insecure_test_key: true) }.not_to raise_error
+    end
+
+    it "refuses keys that repeat one or two bytes, including empty ones" do
+      ["", "k" * 32, "ab" * 16, "\0" * 16].each do |k|
+        expect { GFC64.new(k) }.to raise_error(ArgumentError, /isn't random/)
+      end
+      expect { GFC64.new(nil) }.to raise_error(ArgumentError, /String/)
     end
   end
 

@@ -26,12 +26,18 @@ class GFC64
   # ciphers under the same key (e.g. "invoices" vs "orders"). It isn't a
   # secret and isn't per record: values are only collision-free within one
   # key + tweak. No tweak gives the same results as before tweaks existed.
-  def initialize(key, rounds: nil, bits: MAX_BITS, tweak: nil)
+  #
+  # key: a secret, random String; GFC64.generate_key makes one. Example keys
+  # from the README are refused unless insecure_test_key: true (tests only).
+  def initialize(key, rounds: nil, bits: MAX_BITS, tweak: nil, insecure_test_key: false)
     unless bits.is_a?(Integer) && bits.even? && bits.between?(MIN_BITS, MAX_BITS)
       raise ArgumentError, "bits must be an even Integer from #{MIN_BITS} to #{MAX_BITS}"
     end
 
+    raise ArgumentError, "key must be a String" unless key.is_a?(String)
     raise ArgumentError, "tweak must be a String or nil" unless tweak.nil? || tweak.is_a?(String)
+
+    Keys.check!(key, insecure_test_key)
 
     @key = key
     @tweak = tweak&.b&.freeze
@@ -101,6 +107,7 @@ class GFC64
   end
 end
 
+require "gfc64/keys"
 require "gfc64/active_record"
 require "gfc64/format"
 require "gfc64/ff1"
