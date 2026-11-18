@@ -90,3 +90,4 @@ class GFC64
 end
 
 require "gfc64/active_record"
+require "gfc64/format"

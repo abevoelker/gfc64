@@ -72,6 +72,38 @@ counter can become a short, unguessable code like `7KQMR3XH`.
 - Small widths are small domains: at 16 bits there are only 65,536
   values, so don't rely on unguessability there.
 
+## Formatting codes (`GFC64::Format`)
+
+Encrypted numbers are easier to read, type and say aloud as short strings.
+`GFC64::Format` turns a number of a given width into a fixed-length string
+and back:
+
+```ruby
+gfc = GFC64.new(key, bits: 40)
+fmt = GFC64::Format::Crockford32.new(bits: 40, group: 4)
+
+code = fmt.encode(gfc.encrypt(1)) # => "BGY8-1YKJ"
+gfc.decrypt(fmt.decode(code))     # => 1
+gfc.decrypt(fmt.decode("bgy8 lykj")) # => 1 (any case; O→0, I/L→1; spaces and hyphens ignored)
+```
+
+| Format | `encrypt(1)` with the key above | Length at 40 bits | Good for |
+|---|---|---|---|
+| `Crockford32` | `BGY81YKJ` | 8 | reading aloud and typing: no I, L, O, U; forgiving input |
+| `Base58` | `BQZbwjf` | 7 | links and QR codes: shortest, but case-sensitive |
+| `Decimal` | `0396152076914` | 13 | phone keypads |
+| `Alphabet` | yours | depends | any other set of characters |
+
+- Codes are fixed-length (zero-padded), so a missing or extra character is
+  an error rather than a different number. `fmt.valid?(string)` checks
+  without raising.
+- `decode` also rejects strings outside the width: not every 7-character
+  base58 string is a 40-bit number.
+- `group:` and `separator:` only affect output; the separator, spaces and
+  hyphens are dropped on input.
+- Build your own with `GFC64::Format::Alphabet.new(chars, bits:,
+  case_sensitive:, aliases: { "O" => "0" })`.
+
 ## Rails Usage
 
 For Rails, there's an ActiveRecord mixin which adds `#gfc_id` and
