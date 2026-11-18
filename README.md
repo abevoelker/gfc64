@@ -186,34 +186,91 @@ gfc.decrypt(fmt.decode("bgy8 lykj")) # => 1 (any case; O→0, I/L→1; spaces an
 
 ## Rails Usage
 
-For Rails, there's an ActiveRecord mixin which adds `#gfc_id` and
-`#to_param` methods and a `::find_gfc` class method. By setting `#to_param`,
-resource path helpers like `customer_path(@customer)` automatically use the
-GFC encrypted ID.
+Every ActiveRecord model gets two class methods: `has_public_id` (hide the
+primary key in URLs, nothing stored) and `has_code` (a short code made from
+a sequence and stored in a column, e.g. invoice numbers). Outside Rails,
+`include GFC64::Model`.
 
-Example usage:
+### The key
+
+Set it once; it's read the first time it's needed, so asset builds and
+consoles without the secret still boot:
 
 ```ruby
-# app/models/customer.rb
+# config/initializers/gfc64.rb, or nothing at all to use ENV["GFC64_KEY"]
+GFC64.configure { |c| c.key = Rails.application.credentials.gfc64_key }
+```
 
+The key is 64 hex characters from `GFC64.generate_key`; use a different one
+per environment and keep it. A missing key raises `GFC64::KeyMissing` naming
+the setting.
+
+### Public ids in URLs (`has_public_id`)
+
+```ruby
 class Customer < ApplicationRecord
-  include GFC64::ActiveRecord[GFC64.new(ENV['GFC_KEY'])]
-  # or the argument can be a proc/lambda if you need late binding:
-  # include GFC64::ActiveRecord[-> { GFC64.new(ENV['GFC_KEY']) }]
+  has_public_id bits: 40, format: GFC64::Format::Base58.new(bits: 40)
 end
+
+customer_path(customer)                  # => "/customers/BQZbwjf"
+customer.public_id                       # => "BQZbwjf"
+
+# app/controllers/customers_controller.rb
+@customer = Customer.find_by_public_id!(params[:id])
 ```
 
-For retrieval, use `::find_gfc`:
+- `find_by_public_id!` raises `ActiveRecord::RecordNotFound` (so a 404) for
+  anything that isn't a valid id: wrong characters or length, out of range,
+  or no such record. `find_by_public_id` returns nil instead.
+- Each model gets its own mapping (the tweak defaults to the table name), so
+  Customer 5 and Order 5 have unrelated public ids.
+- `bits:` must cover your largest id (40 bits is about 1.1 trillion). Leave
+  out `format:` for a plain encrypted number (64-bit by default, as in
+  0.1.0), or pass `cipher: :ff1` with a `length:`-based format.
+- `param: false` keeps `to_param` as the plain id.
+
+### Stored codes (`has_code`)
 
 ```ruby
-# app/controllers/customers_controller.rb
+# migration
+execute "CREATE SEQUENCE invoice_numbers"
+add_column :invoices, :number, :string, null: false
+add_index :invoices, :number, unique: true
 
-class CustomersController < ApplicationController
-  def show
-    @customer = Customer.find_gfc(params[:id])
-  end
+class Invoice < ApplicationRecord
+  has_code :number, sequence: "invoice_numbers", prefix: "APP-",
+                    format: GFC64::Format::Crockford32.new(length: 8, group: 4)
 end
+
+invoice = Invoice.create!(...)
+invoice.number                                  # => "APP-TCNH-R99B"
+Invoice.find_by_code!(:number, "app tcnh-r99b") # any case or spacing, O/I/L, prefix optional
+invoice.code_sequence_value(:number)            # => 1 (the sequence value, for bookkeeping)
 ```
+
+- On create, the next value of the Postgres sequence is encrypted with FF1
+  (any alphabet; `cipher: :feistel` for power-of-two ones), formatted,
+  prefixed and stored. A code that's already set is kept.
+- Stored codes never change, even if you later change the format or key:
+  existing records keep theirs.
+- The code is assigned in `before_create`, after validations, so validate
+  it in the database (`null: false`, unique index) rather than with
+  `validates :number, presence: true`.
+- `sequence:` can also be a callable returning the next Integer, for other
+  databases or tests. A sequence skips a value when a transaction rolls
+  back, so counters can have gaps.
+- The tweak defaults to `"table.column"`, so two coded columns never share
+  a mapping.
+
+### Upgrading from `GFC64::ActiveRecord`
+
+The 0.1.0 mixin (`include GFC64::ActiveRecord[gfc]`, `find_gfc`) still works
+and now accepts the String from `params` (bad values raise `RecordNotFound`
+instead of `ArgumentError`). It's deprecated in favor of `has_public_id`. To
+keep the URLs you already have, set the same key with `GFC64.configure` (it
+  must be 64 hex characters, as `SecureRandom.hex(32)` made) and
+use `has_public_id tweak: false`: no format, 64 bits and no tweak give the
+same numbers as the old mixin.
 
 ## Potential drawbacks
 

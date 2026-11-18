@@ -93,6 +93,9 @@ class GFC64
         number
       end
 
+      # The largest value a code can hold.
+      attr_reader :max
+
       # The alphabet's size: pass it as FF1's radix:.
       def radix
         @base

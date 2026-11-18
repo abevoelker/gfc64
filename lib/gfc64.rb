@@ -108,6 +108,8 @@ class GFC64
 end
 
 require "gfc64/keys"
+require "gfc64/config"
 require "gfc64/active_record"
 require "gfc64/format"
 require "gfc64/ff1"
+require "gfc64/model"
