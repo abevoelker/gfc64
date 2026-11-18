@@ -76,7 +76,33 @@ class GFC64
         group ? s.scan(/.{1,#{group}}/).join(separator) : s
       end
 
-      def decode(string)
+      # strict: true accepts only the exact canonical form (what encode
+      # returns: its case, its separators, no look-alikes or extra spaces),
+      # e.g. for input from machines. The default forgives what the alphabet
+      # safely can, for input from people.
+      def decode(string, strict: false)
+        number = lenient_decode(string)
+        if strict && (canonical = encode(number)) != string
+          raise ArgumentError, "#{string[0, 64].inspect} isn't in canonical form (#{canonical.inspect})"
+        end
+
+        number
+      end
+
+      # The canonical form of a code however it was typed, or nil when it
+      # isn't one: normalize("tcnh r99b") => "TCNH-R99B" (with group: 4).
+      def normalize(string)
+        encode(lenient_decode(string))
+      rescue ArgumentError
+        nil
+      end
+
+      # True when the string is exactly the canonical form.
+      def canonical?(string)
+        !string.nil? && normalize(string) == string
+      end
+
+      private def lenient_decode(string)
         raise ArgumentError, "expected a String" unless string.is_a?(String)
 
         s = @ignore ? string.gsub(@ignore, "") : string
@@ -102,8 +128,8 @@ class GFC64
       end
 
       # True when the string decodes (right length, characters and range).
-      def valid?(string)
-        decode(string)
+      def valid?(string, strict: false)
+        decode(string, strict: strict)
         true
       rescue ArgumentError
         false

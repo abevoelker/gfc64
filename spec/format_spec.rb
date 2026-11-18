@@ -33,6 +33,26 @@ RSpec.describe GFC64::Format do
       expect(grouped.decode(code)).to eq(gfc.encrypt(7))
     end
 
+    it "normalizes typed codes to the canonical form, and decodes strictly on request" do
+      grouped = described_class.new(bits: 40, group: 4)
+      code = grouped.encode(gfc.encrypt(7))
+      typed = code.downcase.tr("-", " ").tr("0", "o").tr("1", "l")
+      expect(grouped.normalize(typed)).to eq(code)
+      expect(grouped.normalize(" #{code} ")).to eq(code)
+      expect(grouped.normalize("not a code")).to eq("N0TA-C0DE") # really is one: 8 valid characters
+      expect(grouped.normalize("UUUU-UUUU")).to be_nil
+      expect(grouped.normalize(nil)).to be_nil
+      expect(grouped.canonical?(code)).to be true
+      [typed, code.delete("-"), " #{code}", code.downcase].each do |variant|
+        next if variant == code
+        expect(grouped.canonical?(variant)).to be false
+        expect(grouped.decode(variant)).to eq(grouped.decode(code))
+        expect { grouped.decode(variant, strict: true) }.to raise_error(ArgumentError, /canonical form/)
+        expect(grouped.valid?(variant, strict: true)).to be false
+      end
+      expect(grouped.decode(code, strict: true)).to eq(gfc.encrypt(7))
+    end
+
     it "rejects U, wrong lengths and junk" do
       expect { fmt.decode("UUUUUUUU") }.to raise_error(ArgumentError, /valid character/)
       expect { fmt.decode("1234567") }.to raise_error(ArgumentError, /8 characters/)

@@ -6,7 +6,7 @@ require "securerandom"
 # A balanced Feistel cipher over the integers 0...2**bits: every value maps to
 # exactly one other value of the same width, and back again with the same key.
 class GFC64
-  VERSION = "0.2.0".freeze
+  VERSION = "1.0.0".freeze
 
   MIN_BITS = 16
   MAX_BITS = 64

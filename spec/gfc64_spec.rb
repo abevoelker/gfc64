@@ -1,4 +1,4 @@
-# Pinned when bits: was added (0.2.0); a change here would renumber every
+# Pinned when bits: was added (1.0.0); a change here would renumber every
 # 40-bit value already stored somewhere.
 KNOWN_40_BIT = [396152076914, 535920561349, 936767000312, 674877033606].freeze
 
