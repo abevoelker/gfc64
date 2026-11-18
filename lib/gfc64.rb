@@ -16,17 +16,25 @@ class GFC64
   DEFAULT_ROUNDS = 3
   DEFAULT_NARROW_ROUNDS = 10
 
-  attr_reader :rounds, :key, :block_size, :bits
+  attr_reader :rounds, :key, :block_size, :bits, :tweak
 
   # bits: the width of the numbers encrypted, an even number from 16 to 64.
   # Every number from 0 to 2**bits - 1 encrypts to a different number in the
   # same range. The default (64) gives exactly the same results as 0.1.0.
-  def initialize(key, rounds: nil, bits: MAX_BITS)
+  #
+  # tweak: an optional public String that selects one of many independent
+  # ciphers under the same key (e.g. "invoices" vs "orders"). It isn't a
+  # secret and isn't per record: values are only collision-free within one
+  # key + tweak. No tweak gives the same results as before tweaks existed.
+  def initialize(key, rounds: nil, bits: MAX_BITS, tweak: nil)
     unless bits.is_a?(Integer) && bits.even? && bits.between?(MIN_BITS, MAX_BITS)
       raise ArgumentError, "bits must be an even Integer from #{MIN_BITS} to #{MAX_BITS}"
     end
 
+    raise ArgumentError, "tweak must be a String or nil" unless tweak.nil? || tweak.is_a?(String)
+
     @key = key
+    @tweak = tweak&.b&.freeze
     @bits = bits
     @half_bits = bits / 2
     @half_mask = (1 << @half_bits) - 1
@@ -78,7 +86,11 @@ class GFC64
   end
 
   def derive_round_key(key, round)
-    if bits == MAX_BITS
+    if tweak
+      # Length-prefixed, so ("ab", "c") and ("a", "bc") can't collide.
+      material = "#{key}\0gfc64\0bits=#{bits}\0tweak=".b + [tweak.bytesize].pack("N") + tweak + [round].pack("N")
+      OpenSSL::Digest::SHA256.digest(material)[0...16]
+    elsif bits == MAX_BITS
       # Unchanged from 0.1.0 so 64-bit values stay the same.
       OpenSSL::Digest::SHA256.digest(key + [round].pack("L"))[0...16]
     else
@@ -91,3 +103,4 @@ end
 
 require "gfc64/active_record"
 require "gfc64/format"
+require "gfc64/ff1"

@@ -12,7 +12,7 @@ Gem::Specification.new do |s|
   s.summary     = "Generalized Feistel Cipher for 64-bit integers"
   s.email       = "abe@abevoelker.com"
   s.homepage    = "https://github.com/abevoelker/gfc64"
-  s.description = "Hides sequential primary key counts without resorting to UUIDs or GUIDs."
+  s.description = "Hides sequential primary key counts without resorting to UUIDs or GUIDs: a Feistel cipher over 16-64 bit integers, NIST SP 800-38G FF1, and short-code formatters (Crockford base32, base58)."
   s.authors     = ["Abe Voelker"]
   s.metadata    = {
     "homepage_uri"      => "https://github.com/abevoelker/gfc64",

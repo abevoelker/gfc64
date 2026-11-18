@@ -17,25 +17,35 @@ class GFC64
       attr_reader :alphabet, :bits, :length, :group, :separator
 
       # alphabet:       the characters, lowest value first
-      # bits:           the width of the numbers (match GFC64's bits:)
+      # bits:           the width of the numbers (match GFC64's bits:), or
+      # length:         a fixed number of characters (match FF1's length:
+      #                 when FF1's radix is this alphabet's size)
       # case_sensitive: false folds input to the alphabet's case
       # aliases:        extra input characters read as another, e.g. "O" => "0"
       # group:          on output, put `separator` every `group` characters
       # ignore:         input characters dropped before decoding (spaces and
       #                 hyphens by default; the separator always is)
-      def initialize(alphabet, bits:, case_sensitive: true, aliases: {}, group: nil, separator: "-", ignore: " -")
+      def initialize(alphabet, bits: nil, length: nil, case_sensitive: true, aliases: {}, group: nil, separator: "-", ignore: " -")
         chars = alphabet.chars
         raise ArgumentError, "alphabet needs at least 2 distinct characters" if chars.uniq.size != chars.size || chars.size < 2
-        raise ArgumentError, "bits must be a positive Integer" unless bits.is_a?(Integer) && bits.positive?
+        raise ArgumentError, "give exactly one of bits: or length:" unless bits.nil? ^ length.nil?
+        raise ArgumentError, "bits must be a positive Integer" unless bits.nil? || (bits.is_a?(Integer) && bits.positive?)
+        raise ArgumentError, "length must be a positive Integer" unless length.nil? || (length.is_a?(Integer) && length.positive?)
         raise ArgumentError, "group must be a positive Integer" unless group.nil? || (group.is_a?(Integer) && group.positive?)
 
         @alphabet = alphabet.dup.freeze
         @chars = chars.freeze
         @base = chars.size
-        @bits = bits
-        @max = (1 << bits) - 1
-        @length = 1
-        @length += 1 while @base**@length <= @max
+        if bits
+          @bits = bits
+          @max = (1 << bits) - 1
+          @length = 1
+          @length += 1 while @base**@length <= @max
+        else
+          @length = length
+          @max = @base**length - 1
+          @bits = @max.bit_length
+        end
         @case_sensitive = case_sensitive
         @group = group
         @separator = separator
@@ -52,7 +62,7 @@ class GFC64
 
       def encode(number)
         unless number.is_a?(Integer) && number.between?(0, @max)
-          raise ArgumentError, "Number must be a #{bits}-bit integer (0 to #{@max})"
+          raise ArgumentError, "Number must be from 0 to #{@max}"
         end
 
         out = Array.new(@length, @chars[0])
@@ -78,9 +88,14 @@ class GFC64
 
           acc * @base + digit
         end
-        raise ArgumentError, "#{string.inspect} is out of range for #{bits} bits" if number > @max
+        raise ArgumentError, "#{string.inspect} is out of range (above #{@max})" if number > @max
 
         number
+      end
+
+      # The alphabet's size: pass it as FF1's radix:.
+      def radix
+        @base
       end
 
       # True when the string decodes (right length, characters and range).
@@ -105,8 +120,8 @@ class GFC64
     class Crockford32 < Alphabet
       ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
 
-      def initialize(bits:, group: nil, separator: "-")
-        super(ALPHABET, bits: bits, case_sensitive: false, aliases: { "O" => "0", "I" => "1", "L" => "1" },
+      def initialize(bits: nil, length: nil, group: nil, separator: "-")
+        super(ALPHABET, bits: bits, length: length, case_sensitive: false, aliases: { "O" => "0", "I" => "1", "L" => "1" },
                         group: group, separator: separator)
       end
     end
@@ -117,15 +132,15 @@ class GFC64
     class Base58 < Alphabet
       ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
 
-      def initialize(bits:, group: nil, separator: "-")
-        super(ALPHABET, bits: bits, group: group, separator: separator)
+      def initialize(bits: nil, length: nil, group: nil, separator: "-")
+        super(ALPHABET, bits: bits, length: length, group: group, separator: separator)
       end
     end
 
     # Plain digits, zero-padded (40 bits is 13 digits), e.g. for phone keypads.
     class Decimal < Alphabet
-      def initialize(bits:, group: nil, separator: "-")
-        super("0123456789", bits: bits, group: group, separator: separator)
+      def initialize(bits: nil, length: nil, group: nil, separator: "-")
+        super("0123456789", bits: bits, length: length, group: group, separator: separator)
       end
     end
   end

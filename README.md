@@ -1,6 +1,6 @@
 # GFC64
 
-Encrypt 64-bit integers into other 64-bit integers without collisions.
+Encrypt 64-bit (or narrower) integers into other integers of the same width without collisions, with a Feistel cipher or NIST FF1, and format them as short codes.
 
 Useful for hiding database auto-incrementing primary keys without needing
 to store additional data (like a UUID field).
@@ -71,6 +71,61 @@ counter can become a short, unguessable code like `7KQMR3XH`.
   old ones.
 - Small widths are small domains: at 16 bits there are only 65,536
   values, so don't rely on unguessability there.
+
+## Tweaks (`tweak:`)
+
+A tweak is a public string that picks one of many independent ciphers under
+the same key, the way FF1 and other [tweakable block ciphers][tweakable]
+use one:
+
+```ruby
+invoices = GFC64.new(key, bits: 40, tweak: "invoices")
+orders   = GFC64.new(key, bits: 40, tweak: "orders")
+invoices.encrypt(42) # unrelated to orders.encrypt(42)
+```
+
+- One secret key can serve several kinds of numbers, and knowing one kind's
+  codes says nothing about another's.
+- A tweak isn't a secret, and it isn't a per-record salt: values are only
+  guaranteed collision-free within one key + tweak. Use one fixed tweak per
+  kind of number.
+- A new tweak (`"invoices-v2"`) starts a fresh sequence without a new key.
+- No tweak gives exactly the results from before tweaks existed.
+
+## FF1 (`GFC64::FF1`)
+
+[NIST SP 800-38G][sp800-38g] FF1 is the standard format-preserving cipher:
+it encrypts a string of digits in any base (2 to 65,536) into another of the
+same length and base, with AES and a tweak. This implementation passes all
+nine of NIST's FF1 sample vectors (AES-128/192/256, radix 10 and 36, with and
+without tweaks).
+
+```ruby
+key = SecureRandom.bytes(32) # AES-256; 16 or 24 bytes for AES-128/192
+ff1 = GFC64::FF1.new(key, radix: 32, length: 8, tweak: "invoices")
+fmt = GFC64::Format::Crockford32.new(length: 8, group: 4)
+
+code = fmt.encode(ff1.encrypt(42)) # => e.g. "N4WB-0TQ7"
+ff1.decrypt(fmt.decode(code))      # => 42
+```
+
+- `radix:` doesn't have to be a power of two: a 31-character alphabet works
+  as `FF1.new(key, radix: 31, length: 8)` with
+  `Format::Alphabet.new(chars, length: 8)`.
+- `encrypt_digits` / `decrypt_digits` work on digit arrays (most significant
+  first) of any length the standard allows, as in NIST's examples.
+- SP 800-38G Rev. 1 requires at least 1,000,000 possible values
+  (`radix**length`); smaller domains are rejected.
+- The key is raw bytes; from hex, `[hex].pack("H*")`.
+
+### Which to use
+
+- **FF1** when you want a reviewed standard with published test vectors,
+  or a base that isn't a power of two. It takes about 0.1 ms per
+  value.
+- **`GFC64` (the Feistel cipher)** for 64-bit IDs as in 0.1.0, or when
+  speed matters more than a standard. It's faster, but unreviewed (see the
+  disclaimer).
 
 ## Formatting codes (`GFC64::Format`)
 
@@ -165,4 +220,6 @@ Hat tip to [this Hacker News comment][hn] that led me to the idea and the paper.
 
 [paper]: https://web.cs.ucdavis.edu/~rogaway/papers/subset.pdf
 [crockford]: https://www.crockford.com/base32.html
+[tweakable]: https://people.csail.mit.edu/rivest/pubs/LRW02.pdf
+[sp800-38g]: https://csrc.nist.gov/pubs/sp/800/38/g/r1/2pd
 [hn]: https://news.ycombinator.com/item?id=27016779

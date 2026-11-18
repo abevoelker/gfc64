@@ -96,7 +96,7 @@ RSpec.describe GFC64::Format do
 
     it "rejects numbers outside the width and non-strings" do
       fmt = described_class.new("01", bits: 8)
-      expect { fmt.encode(256) }.to raise_error(ArgumentError, /8-bit/)
+      expect { fmt.encode(256) }.to raise_error(ArgumentError, /0 to 255/)
       expect { fmt.decode(nil) }.to raise_error(ArgumentError)
     end
   end

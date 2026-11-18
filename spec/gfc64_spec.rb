@@ -103,6 +103,52 @@ RSpec.describe GFC64 do
     end
   end
 
+  context "tweaks" do
+    let(:key) { SecureRandom.hex(32) }
+
+    it "leaves results unchanged when no tweak is given (64-bit and narrower)" do
+      known = "ffb5e3600fc27924f97dc055440403b10ce97160261f2a87eee576584cf942e5"
+      expect(GFC64.new(known, tweak: nil).encrypt(1)).to eq(4552956331295818987)
+      expect([1, 2, 3, 1234567890].map { |n| GFC64.new(known, bits: 40).encrypt(n) }).to eq(KNOWN_40_BIT)
+    end
+
+    it "gives unrelated ciphers under one key, each still a permutation" do
+      a = GFC64.new(key, bits: 16, tweak: "invoices")
+      b = GFC64.new(key, bits: 16, tweak: "orders")
+      plain = GFC64.new(key, bits: 16)
+      ea = (0...2**16).map { |n| a.encrypt(n) }
+      eb = (0...2**16).map { |n| b.encrypt(n) }
+      expect(ea.uniq.size).to eq(2**16)
+      expect(eb.uniq.size).to eq(2**16)
+      expect(ea.zip(eb).count { |x, y| x == y }).to be < 10 # ~1 by chance
+      expect(ea.each_with_index.count { |x, n| x == plain.encrypt(n) }).to be < 10
+      expect(ea.each_with_index.all? { |x, n| a.decrypt(x) == n }).to be true
+    end
+
+    it "needs the same tweak to decrypt" do
+      e = GFC64.new(key, bits: 40, tweak: "invoices").encrypt(42)
+      expect(GFC64.new(key, bits: 40, tweak: "invoices").decrypt(e)).to eq(42)
+      expect(GFC64.new(key, bits: 40, tweak: "orders").decrypt(e)).not_to eq(42)
+    end
+
+    it "works at 64 bits and treats an empty tweak as a tweak" do
+      t = GFC64.new(key, tweak: "x")
+      expect(t.decrypt(t.encrypt(2**63))).to eq(2**63)
+      expect(t.encrypt(1)).not_to eq(GFC64.new(key).encrypt(1))
+      expect(GFC64.new(key, bits: 40, tweak: "").encrypt(1)).not_to eq(GFC64.new(key, bits: 40).encrypt(1))
+    end
+
+    it "keeps the tweak and the width apart (length-prefixed)" do
+      a = GFC64.new("k", bits: 40, tweak: "ab").encrypt(7)
+      b = GFC64.new("k", bits: 40, tweak: "a").encrypt(7)
+      expect(a).not_to eq(b)
+    end
+
+    it "rejects a non-String tweak" do
+      expect { GFC64.new(key, tweak: 123) }.to raise_error(ArgumentError, /tweak/)
+    end
+  end
+
   context "invalid arguments" do
     let(:key) { SecureRandom.hex(32) }
 
