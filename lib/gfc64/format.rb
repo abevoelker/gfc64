@@ -16,22 +16,45 @@ class GFC64
     class Alphabet
       attr_reader :alphabet, :bits, :length, :group, :separator
 
+      # Raised by decode when a code's check character doesn't match: a typo
+      # (any one wrong character, or two neighbours swapped), never a valid
+      # code. An ArgumentError, so valid? and normalize treat it like any
+      # other bad input.
+      class CheckError < ArgumentError; end
+
+      # Irreducible polynomials for GF(2^k), used by the check character.
+      GF_POLYNOMIALS = { 2 => 0b111, 3 => 0b1011, 4 => 0b10011, 5 => 0b100101, 6 => 0b1000011,
+                         7 => 0b10000011, 8 => 0b100011011 }.freeze
+
       # alphabet:       the characters, lowest value first
       # bits:           the width of the numbers (match GFC64's bits:), or
       # length:         a fixed number of characters (match FF1's length:
       #                 when FF1's radix is this alphabet's size)
       # case_sensitive: false folds input to the alphabet's case
       # aliases:        extra input characters read as another, e.g. "O" => "0"
-      # group:          on output, put `separator` every `group` characters
+      # group:          on output, put `separator` every `group` characters,
+      #                 or an Array of group sizes, e.g. [4, 5] (the last
+      #                 size repeats for anything longer)
+      # check:          true appends one check character (alphabets of 4 to
+      #                 256 characters, a power of two). It catches every
+      #                 single wrong character and every swap of two
+      #                 neighbours, and it's from the alphabet itself.
       # ignore:         input characters dropped before decoding (spaces and
       #                 hyphens by default; the separator always is)
-      def initialize(alphabet, bits: nil, length: nil, case_sensitive: true, aliases: {}, group: nil, separator: "-", ignore: " -")
+      def initialize(alphabet, bits: nil, length: nil, case_sensitive: true, aliases: {}, group: nil, separator: "-", ignore: " -",
+                     check: false)
         chars = alphabet.chars
         raise ArgumentError, "alphabet needs at least 2 distinct characters" if chars.uniq.size != chars.size || chars.size < 2
         raise ArgumentError, "give exactly one of bits: or length:" unless bits.nil? ^ length.nil?
         raise ArgumentError, "bits must be a positive Integer" unless bits.nil? || (bits.is_a?(Integer) && bits.positive?)
         raise ArgumentError, "length must be a positive Integer" unless length.nil? || (length.is_a?(Integer) && length.positive?)
-        raise ArgumentError, "group must be a positive Integer" unless group.nil? || (group.is_a?(Integer) && group.positive?)
+        groups = group.is_a?(Array) ? group : [group].compact
+        unless groups.all? { |g| g.is_a?(Integer) && g.positive? } && (group.nil? || !groups.empty?)
+          raise ArgumentError, "group must be a positive Integer or an Array of them"
+        end
+        if check && !(chars.size & (chars.size - 1)).zero? || check && !GF_POLYNOMIALS.key?(chars.size.bit_length - 1)
+          raise ArgumentError, "check: needs an alphabet of 4 to 256 characters, a power of two (this one has #{chars.size})"
+        end
 
         @alphabet = alphabet.dup.freeze
         @chars = chars.freeze
@@ -47,7 +70,13 @@ class GFC64
           @bits = @max.bit_length
         end
         @case_sensitive = case_sensitive
-        @group = group
+        @group = group.is_a?(Array) ? group.dup.freeze : group
+        @groups = groups.freeze
+        @check = check ? true : false
+        if @check
+          @gf_bits = @base.bit_length - 1
+          @gf_poly = GF_POLYNOMIALS.fetch(@gf_bits)
+        end
         @separator = separator
         dropped = (ignore.to_s + separator.to_s).chars.uniq - chars
         @ignore = dropped.empty? ? nil : /[#{Regexp.escape(dropped.join)}]/
@@ -72,8 +101,18 @@ class GFC64
           out[i] = @chars[digit]
           i -= 1
         end
-        s = out.join
-        group ? s.scan(/.{1,#{group}}/).join(separator) : s
+        out << @chars[check_digit(out.map { |c| @values[fold(c)] })] if @check
+        grouped(out.join)
+      end
+
+      # True when codes end in a check character.
+      def check?
+        @check
+      end
+
+      # Characters in a code, counting the check character but not separators.
+      def code_length
+        @length + (@check ? 1 : 0)
       end
 
       # strict: true accepts only the exact canonical form (what encode
@@ -106,14 +145,20 @@ class GFC64
         raise ArgumentError, "expected a String" unless string.is_a?(String)
 
         s = @ignore ? string.gsub(@ignore, "") : string
-        raise ArgumentError, "expected #{@length} characters, got #{s.length}" unless s.length == @length
+        raise ArgumentError, "expected #{code_length} characters, got #{s.length}" unless s.length == code_length
 
-        number = s.each_char.reduce(0) do |acc, c|
+        digits = s.each_char.map do |c|
           digit = @values[fold(c)]
           raise ArgumentError, "#{c.inspect} isn't a valid character" if digit.nil?
 
-          acc * @base + digit
+          digit
         end
+        if @check
+          raise CheckError, "#{string[0, 64].inspect} has a typo (its check character doesn't match)" unless damm(digits).zero?
+
+          digits.pop
+        end
+        number = digits.reduce(0) { |acc, d| acc * @base + d }
         raise ArgumentError, "#{string.inspect} is out of range (above #{@max})" if number > @max
 
         number
@@ -140,18 +185,54 @@ class GFC64
       def fold(c)
         @case_sensitive ? c : c.upcase
       end
+
+      def grouped(s)
+        return s if @groups.empty?
+
+        parts = []
+        i = 0
+        k = 0
+        while i < s.length
+          size = @groups[[k, @groups.size - 1].min]
+          parts << s[i, size]
+          i += size
+          k += 1
+        end
+        parts.join(separator)
+      end
+
+      # Damm's algorithm over GF(2^k) with x * y = 2x + y: a weakly totally
+      # anti-symmetric quasigroup, so any one changed digit or swap of two
+      # neighbouring digits changes the result.
+      def damm(digits)
+        digits.reduce(0) { |acc, d| gf_double(acc) ^ d }
+      end
+
+      # The digit that brings the running Damm value to zero.
+      def check_digit(digits)
+        gf_double(damm(digits))
+      end
+
+      def gf_double(x)
+        x <<= 1
+        x ^= @gf_poly if x >= @base
+        x
+      end
     end
 
     # Douglas Crockford's base32 (https://www.crockford.com/base32.html):
     # digits and capitals without I, L, O, U. Input is forgiving: any case,
     # O reads as 0, I and L as 1, hyphens and spaces ignored. 40 bits is
     # exactly 8 characters.
+    #
+    # check: true adds a 9th character from the same 32 (not Crockford's own
+    # mod-37 check symbols *~$=U, which are awkward in links and to read out).
     class Crockford32 < Alphabet
       ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
 
-      def initialize(bits: nil, length: nil, group: nil, separator: "-")
+      def initialize(bits: nil, length: nil, group: nil, separator: "-", check: false)
         super(ALPHABET, bits: bits, length: length, case_sensitive: false, aliases: { "O" => "0", "I" => "1", "L" => "1" },
-                        group: group, separator: separator)
+                        group: group, separator: separator, check: check)
       end
     end
 

@@ -404,6 +404,23 @@ gfc.decrypt(fmt.decode("bgy8 lykj")) # => 1 (any case; O→0, I/L→1; spaces an
   into a different valid code.
 - `group:` and `separator:` only affect output; the separator, spaces and
   hyphens are dropped on input (unless the alphabet uses them as digits).
+- `group:` can also be a list of sizes: `group: [4, 5]` gives
+  `XXXX-XXXXX`; the last size repeats for anything longer.
+- `check: true` adds one check character, taken from the alphabet itself
+  (for alphabets whose size is a power of two from 4 to 256, such as
+  Crockford32). It catches every single wrong character and every swap of
+  two neighbouring characters, so an app can say "that code has a typo"
+  without a lookup. `decode` then raises `GFC64::Format::Alphabet::CheckError`
+  (an `ArgumentError`). The check is Damm's algorithm over GF(2^k), not
+  Crockford's mod-37 check symbols (`*~$=U`), which are awkward in links
+  and read aloud. `fmt.length` stays the data length (what FF1 needs);
+  `fmt.code_length` counts the check character too.
+
+  ```ruby
+  fmt = GFC64::Format::Crockford32.new(length: 8, group: [4, 5], check: true)
+  fmt.encode(12345)       # => "0000-0C1SW"
+  fmt.valid?("0000-0C1SX") # => false (typo)
+  ```
 - `fmt.normalize("tcnh r99b")` returns the canonical form (`"TCNH-R99B"`
   with `group: 4`), or nil when it isn't a code; `fmt.canonical?(string)`
   checks for exactly that form.
@@ -451,6 +468,8 @@ INSERT INTO gfc64_keys VALUES ('default', decode('<the 64 hex characters>', 'hex
   the primary-key column (`id` by default). The tweak must match the
   model's: `has_code`'s default is `"table.column"`. A code that's already
   set (by `has_code`, or by hand) is kept, so the two can run together.
+- **Not yet in SQL:** `check: true` and lists of group sizes; the SQL
+  writes plain codes with one group size.
 - **Functions** for use in SQL: `gfc64_ff1(key, tweak, radix, length,
   value, decrypting)`, `gfc64_crockford_encode(value, length, group)` and
   `gfc64_crockford_decode(text, length)` (forgiving, NULL for anything that

@@ -4,6 +4,14 @@
 
 ### Added
 
+- `check: true` on formats (Crockford32, or any alphabet whose size is a
+  power of two from 4 to 256): one extra character from the alphabet that
+  catches every single wrong character and every swap of neighbours
+  (Damm's algorithm over GF(2^k)). A mismatch raises
+  `GFC64::Format::Alphabet::CheckError`. `Format#code_length` and
+  `Format#check?`.
+- `group:` takes a list of sizes, e.g. `group: [4, 5]` for `XXXX-XXXXX`.
+
 - `sql/gfc64_postgres.sql` (experimental): FF1 and Crockford base32 in
   PL/pgSQL on pgcrypto, and a `BEFORE INSERT` trigger that fills a code
   column from the row's primary key, giving the same codes as `has_code`

@@ -53,6 +53,59 @@ RSpec.describe GFC64::Format do
       expect(grouped.decode(code, strict: true)).to eq(gfc.encrypt(7))
     end
 
+    describe "check: true" do
+      let(:fmt) { described_class.new(length: 8, group: [4, 5], check: true) }
+      let(:alpha) { described_class::ALPHABET.chars }
+
+      it "adds a 9th character from the alphabet, grouped 4 + 5" do
+        code = fmt.encode(gfc.encrypt(7))
+        expect(code).to match(/\A[0-9A-HJKMNP-TV-Z]{4}-[0-9A-HJKMNP-TV-Z]{5}\z/)
+        expect(fmt.code_length).to eq(9)
+        expect(fmt.length).to eq(8)
+        expect(fmt.check?).to be true
+        expect(fmt.decode(code)).to eq(gfc.encrypt(7))
+        expect(fmt.decode(code.downcase.tr("-", " "))).to eq(gfc.encrypt(7))
+        expect(fmt.normalize(code.delete("-").downcase)).to eq(code)
+        expect(fmt.decode(code, strict: true)).to eq(gfc.encrypt(7))
+      end
+
+      it "catches every single wrong character and every swap of neighbours" do
+        200.times do
+          raw = fmt.encode(rand(2**40)).delete("-")
+          raw.length.times do |i|
+            (alpha - [raw[i]]).each do |c|
+              typo = raw.dup
+              typo[i] = c
+              expect { fmt.decode(typo) }.to raise_error(GFC64::Format::Alphabet::CheckError, /typo/)
+            end
+            next if i == raw.length - 1 || raw[i] == raw[i + 1]
+
+            swapped = raw.dup
+            swapped[i], swapped[i + 1] = raw[i + 1], raw[i]
+            expect(fmt.valid?(swapped)).to be false
+          end
+        end
+      end
+
+      it "still forgives look-alikes, which aren't typos" do
+        raw = fmt.encode(0).delete("-")
+        expect(fmt.decode(raw.tr("0", "O"))).to eq(0)
+      end
+
+      it "rejects a code without its check character, and alphabets it can't check" do
+        expect { fmt.decode(described_class.new(length: 8).encode(5)) }.to raise_error(ArgumentError, /9 characters/)
+        expect { GFC64::Format::Alphabet.new("0123456789", bits: 8, check: true) }.to raise_error(ArgumentError, /power of two/)
+        expect { GFC64::Format::Alphabet.new("01", bits: 8, check: true) }.to raise_error(ArgumentError, /power of two/)
+        expect(GFC64::Format::Alphabet.new("0123", bits: 8, check: true).encode(200).length).to eq(5)
+      end
+    end
+
+    it "groups by a list of sizes, the last repeating" do
+      expect(described_class.new(length: 8, group: [3, 2]).encode(0)).to eq("000-00-00-0")
+      expect { described_class.new(length: 8, group: []) }.to raise_error(ArgumentError, /group/)
+      expect { described_class.new(length: 8, group: [4, 0]) }.to raise_error(ArgumentError, /group/)
+    end
+
     it "rejects U, wrong lengths and junk" do
       expect { fmt.decode("UUUUUUUU") }.to raise_error(ArgumentError, /valid character/)
       expect { fmt.decode("1234567") }.to raise_error(ArgumentError, /8 characters/)
